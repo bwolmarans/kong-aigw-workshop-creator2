@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_TAG="2.0.3"
+IMAGE_TAG="latest"
 
 usage() {
   echo "Usage: $0 [options]"
