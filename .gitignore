@@ -1,0 +1,5 @@
+deployments/*/
+!deployments/*.tar.enc
+
+__pycache__/
+*.pyc

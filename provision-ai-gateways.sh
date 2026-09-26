@@ -13,6 +13,7 @@ usage() {
   echo "  --region <region>        Konnect region (default: us)"
   echo "  --apply-automatically    Skip deploy prompt and apply to all gateways"
   echo "  --router-only            Only create the AI Gateway Router, skip per-gateway loop"
+  echo "  --skip-preflight         Skip the automatic preflight-check.sh run"
   exit 1
 }
 
@@ -24,6 +25,7 @@ NAMESPACE=""
 REGION="us"
 APPLY_AUTOMATICALLY=false
 ROUTER_ONLY=false
+SKIP_PREFLIGHT=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,10 +37,20 @@ while [[ $# -gt 0 ]]; do
     --region)      REGION="$2"; shift 2 ;;
     --apply-automatically) APPLY_AUTOMATICALLY=true; shift ;;
     --router-only) ROUTER_ONLY=true; shift ;;
+    --skip-preflight) SKIP_PREFLIGHT=true; shift ;;
     -h|--help) usage ;;
     *) echo "Unknown option: $1"; usage ;;
   esac
 done
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if ! $SKIP_PREFLIGHT; then
+  if [[ -x "$SCRIPT_DIR/preflight-check.sh" ]]; then
+    "$SCRIPT_DIR/preflight-check.sh" --fix
+  else
+    echo "Warning: $SCRIPT_DIR/preflight-check.sh not found, skipping preflight checks"
+  fi
+fi
 
 [[ -z "$KONNECT_TOKEN" ]] && read -rp "Konnect PAT: " KONNECT_TOKEN
 if ! $ROUTER_ONLY; then
@@ -65,23 +77,6 @@ while true; do
 done
 echo "  ${#VAULT_KEYS[@]} key(s) collected."
 echo ""
-
-# ── Cloudsmith credentials ─────────────────────────────────────────────────────
-if ! $ROUTER_ONLY; then
-  read -rp "Cloudsmith username: " CS_USER
-  read -rsp "Cloudsmith password/token: " CS_PASS
-  echo ""
-  echo -n "Verifying Cloudsmith credentials ... "
-  cs_http=$(curl -s -o /dev/null -w "%{http_code}" \
-    -u "${CS_USER}:${CS_PASS}" \
-    "https://docker.cloudsmith.io/v2/kong/ai-pii/service/tags/list")
-  if [[ "$cs_http" != "200" ]]; then
-    echo "FAILED (HTTP $cs_http) — check your username and token"
-    exit 1
-  fi
-  echo "OK"
-  echo ""
-fi
 
 curl_with_retry() {
   local attempt response http_code
@@ -596,14 +591,6 @@ if $APPLY_AUTOMATICALLY; then
   # ── Deploy PII sanitizer + Redis ────────────────────────────────────────────
   echo "  Deploying PII sanitizer and Redis into namespace $NAMESPACE ..."
 
-  echo "  Creating Cloudsmith pull secret ..."
-  kubectl create secret docker-registry cloudsmith-registry-secret \
-    --docker-server=docker.cloudsmith.io \
-    --docker-username="$CS_USER" \
-    --docker-password="$CS_PASS" \
-    -n "$NAMESPACE" \
-    --dry-run=client -o yaml | kubectl apply -f -
-
   kubectl apply -n "$NAMESPACE" -f - <<'KUBEEOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -621,13 +608,11 @@ spec:
       labels:
         app: kong-pii-sanitizer
     spec:
-      imagePullSecrets:
-        - name: cloudsmith-registry-secret
       nodeSelector:
         cloud.google.com/gke-nodepool: larger-node-pool
       containers:
         - name: pii-sanitizer
-          image: docker.cloudsmith.io/kong/ai-pii/service:v0.2.2-en
+          image: kong/ai-pii-service:v0.2.2-en
           args: ["--host", "0.0.0.0", "--port", "8080"]
           ports:
             - name: http-port

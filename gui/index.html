@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Kong AI Gateway Workshop Provisioner</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2e38;
+    --text: #e6e8ec;
+    --muted: #9aa1ac;
+    --accent: #14b8a6;
+    --danger: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { margin: 0; font-size: 18px; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .layout {
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    gap: 0;
+    height: calc(100vh - 73px);
+  }
+  .panel {
+    padding: 20px 28px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+  }
+  fieldset {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 0 0 16px;
+    padding: 14px 16px;
+  }
+  legend { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; padding: 0 6px; }
+  label { display: block; font-size: 13px; margin: 10px 0 4px; color: var(--muted); }
+  input[type="text"], input[type="password"], select {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+  }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+  .checkbox-row input { width: auto; }
+  .checkbox-row label { margin: 0; color: var(--text); font-size: 13px; }
+  .vault-row { display: flex; gap: 8px; margin-bottom: 6px; }
+  .vault-row input { flex: 1; }
+  .vault-row button { flex: 0 0 auto; }
+  button {
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); }
+  #runBtn {
+    width: 100%;
+    margin-top: 8px;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #06231f;
+    font-weight: 600;
+    padding: 12px;
+  }
+  #runBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .console {
+    padding: 20px 28px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  .console h2 { margin: 0 0 8px; font-size: 14px; color: var(--muted); font-weight: 500; }
+  #log {
+    flex: 1;
+    background: #0a0b0e;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    overflow-y: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .status { font-size: 12px; margin-top: 8px; color: var(--muted); }
+  .status.ok { color: var(--accent); }
+  .status.err { color: var(--danger); }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kong AI Gateway 2.0 Workshop Provisioner</h1>
+  <p>GUI wrapper over provision-ai-gateways.sh — runs locally, streams live output.</p>
+</header>
+
+<div class="layout">
+  <div class="panel">
+    <button type="button" id="preflightBtn" style="width:100%; margin-bottom:16px;">Run preflight checks</button>
+
+    <fieldset>
+      <legend>Konnect</legend>
+      <label>Konnect PAT</label>
+      <input type="password" id="pat" placeholder="kpat_xxxxxxxx" />
+      <label>Region</label>
+      <select id="region">
+        <option value="us">us</option>
+        <option value="eu">eu</option>
+        <option value="au">au</option>
+      </select>
+      <label>Org (deployments folder name)</label>
+      <input type="text" id="org" placeholder="acme" />
+      <label>Kubernetes namespace</label>
+      <input type="text" id="namespace" placeholder="brett-test" />
+    </fieldset>
+
+    <fieldset>
+      <legend>Mode</legend>
+      <div class="checkbox-row">
+        <input type="checkbox" id="routerOnly" />
+        <label for="routerOnly">Router-only (skip per-student gateways)</label>
+      </div>
+    </fieldset>
+
+    <fieldset id="gatewaysFieldset">
+      <legend>Per-student gateways</legend>
+      <label>Prefix</label>
+      <input type="text" id="prefix" placeholder="student" />
+      <label>Range (e.g. 7 or 1-10)</label>
+      <input type="text" id="range" placeholder="1-10" />
+    </fieldset>
+
+    <fieldset>
+      <legend>Vault secrets (ai vault, per gateway)</legend>
+      <div id="vaultRows"></div>
+      <button type="button" id="addVaultRow">+ Add key/value</button>
+      <p class="hint">e.g. openai-api-key, aws-access-key, aws-secret-access-key</p>
+    </fieldset>
+
+    <button id="runBtn">Run provisioning</button>
+    <div id="status" class="status"></div>
+
+    <fieldset>
+      <legend>Artifact encryption</legend>
+      <label>Org (deployments/&lt;org&gt;)</label>
+      <input type="text" id="encOrg" placeholder="acme" />
+      <label>Passphrase</label>
+      <input type="password" id="encPass" />
+      <div class="row" style="margin-top: 10px; gap: 8px;">
+        <button type="button" id="encryptBtn" style="flex:1;">Encrypt artifacts</button>
+        <button type="button" id="decryptBtn" style="flex:1;">Decrypt artifacts</button>
+      </div>
+      <p class="hint">Encrypt: tars + AES-256 encrypts deployments/&lt;org&gt;/ into deployments/&lt;org&gt;.tar.enc, then deletes the plaintext. Decrypt reverses it.</p>
+    </fieldset>
+  </div>
+
+  <div class="console">
+    <h2>Live output</h2>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+const vaultRows = document.getElementById('vaultRows');
+const routerOnly = document.getElementById('routerOnly');
+const gatewaysFieldset = document.getElementById('gatewaysFieldset');
+
+function addVaultRow(key = '', value = '') {
+  const row = document.createElement('div');
+  row.className = 'vault-row';
+  row.innerHTML = `
+    <input type="text" placeholder="key (e.g. openai-api-key)" class="vkey" value="${key}">
+    <input type="password" placeholder="value" class="vval" value="${value}">
+    <button type="button" class="removeRow">✕</button>
+  `;
+  row.querySelector('.removeRow').onclick = () => row.remove();
+  vaultRows.appendChild(row);
+}
+addVaultRow();
+document.getElementById('addVaultRow').onclick = () => addVaultRow();
+
+routerOnly.onchange = () => {
+  gatewaysFieldset.style.display = routerOnly.checked ? 'none' : 'block';
+};
+
+function collectPayload() {
+  const vault = Array.from(vaultRows.querySelectorAll('.vault-row')).map(r => ({
+    key: r.querySelector('.vkey').value,
+    value: r.querySelector('.vval').value,
+  })).filter(kv => kv.key.trim());
+
+  return {
+    pat: document.getElementById('pat').value,
+    region: document.getElementById('region').value,
+    org: document.getElementById('org').value,
+    namespace: document.getElementById('namespace').value,
+    router_only: routerOnly.checked,
+    prefix: document.getElementById('prefix').value,
+    range: document.getElementById('range').value,
+    vault: vault,
+  };
+}
+
+const runBtn = document.getElementById('runBtn');
+const statusEl = document.getElementById('status');
+const logEl = document.getElementById('log');
+
+function appendLines(lines) {
+  for (const line of lines) {
+    logEl.textContent += line + '\n';
+  }
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function poll(jobId) {
+  let seen = 0;
+  while (true) {
+    const res = await fetch(`/api/poll/${jobId}`);
+    const data = await res.json();
+    if (data.lines && data.lines.length > seen) {
+      appendLines(data.lines.slice(seen));
+      seen = data.lines.length;
+    }
+    if (data.done) {
+      const ok = data.returncode === 0;
+      statusEl.textContent = ok ? 'Finished successfully.' : `Finished with exit code ${data.returncode}.`;
+      statusEl.className = 'status ' + (ok ? 'ok' : 'err');
+      runBtn.disabled = false;
+      return;
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+}
+
+runBtn.onclick = async () => {
+  const payload = collectPayload();
+  if (!payload.pat) { statusEl.textContent = 'Konnect PAT is required.'; statusEl.className = 'status err'; return; }
+  if (!payload.org || !payload.namespace) { statusEl.textContent = 'Org and namespace are required.'; statusEl.className = 'status err'; return; }
+
+  logEl.textContent = '';
+  statusEl.textContent = 'Running...';
+  statusEl.className = 'status';
+  runBtn.disabled = true;
+
+  const res = await fetch('/api/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (data.error) {
+    statusEl.textContent = data.error;
+    statusEl.className = 'status err';
+    runBtn.disabled = false;
+    return;
+  }
+  poll(data.job_id).finally(() => { runBtn.disabled = false; });
+};
+
+async function runEncryptDecrypt(endpoint, btn) {
+  const org = document.getElementById('encOrg').value.trim();
+  const passphrase = document.getElementById('encPass').value;
+  if (!org || !passphrase) {
+    statusEl.textContent = 'Org and passphrase are required for encrypt/decrypt.';
+    statusEl.className = 'status err';
+    return;
+  }
+  logEl.textContent = '';
+  statusEl.textContent = 'Running...';
+  statusEl.className = 'status';
+  btn.disabled = true;
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ org, passphrase }),
+  });
+  const data = await res.json();
+  if (data.error) {
+    statusEl.textContent = data.error;
+    statusEl.className = 'status err';
+    btn.disabled = false;
+    return;
+  }
+  poll(data.job_id).finally(() => { btn.disabled = false; });
+}
+
+document.getElementById('encryptBtn').onclick = () =>
+  runEncryptDecrypt('/api/encrypt', document.getElementById('encryptBtn'));
+document.getElementById('decryptBtn').onclick = () =>
+  runEncryptDecrypt('/api/decrypt', document.getElementById('decryptBtn'));
+
+const preflightBtn = document.getElementById('preflightBtn');
+preflightBtn.onclick = async () => {
+  logEl.textContent = '';
+  statusEl.textContent = 'Running preflight checks...';
+  statusEl.className = 'status';
+  preflightBtn.disabled = true;
+
+  const res = await fetch('/api/preflight', { method: 'POST' });
+  const data = await res.json();
+  poll(data.job_id).finally(() => { preflightBtn.disabled = false; });
+};
+</script>
+</body>
+</html>

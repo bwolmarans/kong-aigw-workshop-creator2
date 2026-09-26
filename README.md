@@ -21,7 +21,6 @@ deploy-ai-services.sh is also not needed unless for some reason you need to depl
 | `jq` | `brew install jq` |
 | `openssl` | System openssl is fine |
 | Kong Konnect PAT | Org-Admin personal access token |
-| Cloudsmith credentials | Username + API token with pull access to `kong/ai-pii` |
 | Vault keys for the lab | openai-api-key, aws-access-key, aws-secret-access-key |
 
 The GKE cluster must have a node pool named `larger-node-pool` for the PII sanitizer and Redis workloads.
@@ -65,7 +64,6 @@ example:
 
 The script will interactively prompt for:
 1. Vault secrets (key/value pairs stored in each student gateway's `ai` vault — e.g. `openai-api-key`, `aws-access-key`, `aws-secret-access-key`)
-2. Cloudsmith username and API token (verified before proceeding)
 
 ### Re-run a single failed gateway
 
@@ -106,8 +104,7 @@ The script will interactively prompt for:
    - Creates a Kong service + route in the router for each student gateway
 
 3. **Shared services** (deployed once into `<namespace>`)
-   - Creates a `cloudsmith-registry-secret` image pull secret
-   - Deploys `kong-pii-sanitizer` (ClusterIP on port 8080)
+   - Deploys `kong-pii-sanitizer` (ClusterIP on port 8080, image `kong/ai-pii-service` from Docker Hub)
    - Deploys `redis-vector-db` / `redis-stack-server` (ClusterIP on port 6379)
    - Waits for both rollouts to complete
 
