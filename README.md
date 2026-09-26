@@ -126,6 +126,18 @@ deployments/<org>/
     values.yaml
 ```
 
+## GUI
+
+A local web GUI wraps `provision-ai-gateways.sh` — no dependencies beyond stdlib Python 3.
+
+```bash
+python3 gui/server.py
+```
+
+Then open `http://localhost:8765` in a browser. The form mirrors the CLI flags, plus vault key/value rows, and buttons to run preflight checks and encrypt/decrypt `deployments/<org>/` artifacts. It always runs with `--apply-automatically` and streams the script's output live.
+
+![GUI screenshot](gui/screenshot.png)
+
 ## Deleting
 
 The delete script can be used to delete the AI GW 2.0 objects in the konnect org, asks y/n for each one.  Does not delete the dataplanes
